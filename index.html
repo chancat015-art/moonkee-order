@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>滿記落單系統</title>
+    <!-- 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #f3f4f6;
+            -webkit-tap-highlight-color: transparent;
+        }
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+        .tab-active {
+            border-bottom: 4px solid #3b82f6;
+            color: #1d4ed8;
+            font-weight: bold;
+        }
+        .tab-inactive {
+            border-bottom: 4px solid transparent;
+            color: #6b7280;
+        }
+        .admin-sub-tab-active {
+            background-color: #3b82f6;
+            color: white;
+        }
+        .admin-sub-tab-inactive {
+            background-color: #e5e7eb;
+            color: #374151;
+        }
+    </style>
+</head>
+<body class="min-h-screen relative text-gray-800 flex flex-col">
+
+    <!-- 頂部標題與導覽列 -->
+    <header class="bg-white shadow-sm sticky top-0 z-40">
+        <div class="bg-blue-600 text-white p-4">
+            <h1 id="main-title" class="text-xl font-bold text-center">滿記落單系統</h1>
+        </div>
+        <div class="flex">
+            <button id="tab-customer" onclick="window.switchTab('customer')" class="flex-1 py-3 text-center tab-active transition-colors">
+                📝 落單區
+            </button>
+            <button id="tab-admin" onclick="window.switchTab('admin')" class="flex-1 py-3 text-center tab-inactive transition-colors">
+                ⚙️ 後台管理
+            </button>
+        </div>
+    </header>
+
+    <!-- 提示訊息 (Toast) -->
+    <div id="toastMsg" class="fixed top-32 left-1/2 -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-full shadow-lg transition-opacity duration-300 opacity-0 pointer-events-none z-50 whitespace-nowrap text-sm">
+        提示訊息
+    </div>
+
+    <!-- 密碼輸入 Modal -->
+    <div id="passwordModal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
+            <h3 class="text-lg font-bold mb-4">請輸入後台密碼</h3>
+            <input type="password" id="adminPassword" placeholder="輸入密碼" class="w-full h-12 px-4 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4">
+            <div id="passwordError" class="text-red-500 text-sm mb-4 hidden">密碼錯誤，請重試！</div>
+            <div class="flex justify-end gap-3">
+                <button onclick="window.closePasswordModal()" class="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors">取消</button>
+                <button onclick="window.verifyPassword()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-bold">確認</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 未選店舖歡迎區 ==================== -->
+    <main id="view-noshop" class="flex-1 p-4 sm:p-6 max-w-2xl mx-auto w-full hidden flex items-center justify-center flex-col">
+        <div class="bg-white p-8 rounded-2xl shadow-sm text-center">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">歡迎使用滿記落單系統</h2>
+            <p class="text-gray-500 mb-6">請使用專屬的餐廳連結進入落單區，或由管理員進入後台。</p>
+            <div class="text-sm text-gray-400">如果您是管理員，請點擊上方「後台管理」。</div>
+            <div id="shopSelectorList" class="mt-6 flex flex-col gap-2">
+                <!-- 預覽用的店舖捷徑 -->
+            </div>
+        </div>
+    </main>
+
+    <!-- ==================== 落單區 (Customer View) ==================== -->
+    <main id="view-customer" class="flex-1 p-4 sm:p-6 max-w-2xl mx-auto w-full pb-32 hidden">
+        <p class="text-sm text-gray-500 mb-4 px-1">請填寫 <span id="customer-shop-name" class="font-bold text-blue-600"></span> 需訂購的產品及數量：</p>
+        
+        <div id="productList" class="grid grid-cols-1 gap-3">
+            <div class="text-center py-10 text-gray-400">載入產品中...</div>
+        </div>
+
+        <div class="mt-10 pt-6 border-t border-gray-200">
+            <div class="flex justify-between items-center mb-4 px-1">
+                <h2 class="text-lg font-bold text-gray-800">新增臨時產品 (其他)</h2>
+                <button onclick="window.addCustomItem()" class="text-sm bg-blue-100 text-blue-600 px-4 py-1.5 rounded-full font-bold hover:bg-blue-200 transition-colors">
+                    + 新增項目
+                </button>
+            </div>
+            <div id="customItemsList" class="grid grid-cols-1 gap-3"></div>
+        </div>
+    </main>
+
+    <!-- 底部固定提交按鈕 (Customer Only) -->
+    <footer id="customer-footer" class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)] z-30 hidden">
+        <div class="max-w-2xl mx-auto">
+            <button onclick="window.submitOrder()" 
+                    class="w-full py-4 bg-blue-600 text-white text-xl font-bold rounded-xl shadow-md hover:bg-blue-700 active:bg-blue-800 transition-colors flex justify-center items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 1.414L10.586 9H7a1 1 0 100 2h3.586l-1.293 1.293a1 1 0 101.414 1.414l3-3a1 1 0 000-1.414z" clip-rule="evenodd" /></svg>
+                提交訂單
+            </button>
+        </div>
+    </footer>
+
+    <!-- ==================== 後台管理 (Admin View) ==================== -->
+    <main id="view-admin" class="flex-1 p-4 sm:p-6 max-w-2xl mx-auto w-full hidden">
+        <!-- 後台子選單 -->
+        <div class="flex gap-2 mb-6 overflow-x-auto">
+            <button onclick="window.switchAdminTab('orders')" id="admin-tab-orders" class="flex-1 py-2 px-2 rounded-lg font-bold admin-sub-tab-active transition-colors whitespace-nowrap text-sm">訂單管理</button>
+            <button onclick="window.switchAdminTab('shops')" id="admin-tab-shops" class="flex-1 py-2 px-2 rounded-lg font-bold admin-sub-tab-inactive transition-colors whitespace-nowrap text-sm">店舖管理</button>
+            <button onclick="window.switchAdminTab('products')" id="admin-tab-products" class="flex-1 py-2 px-2 rounded-lg font-bold admin-sub-tab-inactive transition-colors whitespace-nowrap text-sm">產品設定</button>
+        </div>
+
+        <!-- 0. 訂單管理區 -->
+        <div id="admin-view-orders">
+            <h2 class="text-lg font-bold mb-3 text-gray-800">最新訂單</h2>
+            <div id="adminOrderList" class="grid grid-cols-1 gap-4">
+                <div class="text-gray-400 text-sm py-4">載入中...</div>
+            </div>
+        </div>
+
+        <!-- 1. 店舖管理區 -->
+        <div id="admin-view-shops" class="hidden">
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 mb-6">
+                <h2 class="text-lg font-bold mb-4 flex items-center gap-2">➕ 新增餐廳/店舖</h2>
+                <form id="addShopForm" onsubmit="window.saveShop(event)">
+                    <div class="grid grid-cols-1 gap-3 mb-4">
+                        <div>
+                            <label class="block text-xs text-gray-600 mb-1">店舖代號 (英文/數字，用於網址)*</label>
+                            <input type="text" id="s_id" required placeholder="如: wanchai99" class="w-full h-10 px-3 bg-gray-50 border border-gray-300 rounded-lg">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-600 mb-1">店舖顯示名稱*</label>
+                            <input type="text" id="s_name" required placeholder="如: 99灣仔店" class="w-full h-10 px-3 bg-gray-50 border border-gray-300 rounded-lg">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-600 mb-1">WhatsApp 發送模式*</label>
+                            <select id="s_wa_mode" onchange="window.toggleWaInput()" class="w-full h-10 px-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <option value="group">手動選擇 WhatsApp 群組 / 聯絡人 (推薦)</option>
+                                <option value="direct">直接發送到特定號碼</option>
+                            </select>
+                        </div>
+                        <div id="wa_number_container" class="hidden">
+                            <label class="block text-xs text-gray-600 mb-1">接收訂單的 WhatsApp 號碼 (包含區號)*</label>
+                            <input type="text" id="s_whatsapp" placeholder="如: 85212345678" class="w-full h-10 px-3 bg-gray-50 border border-gray-300 rounded-lg">
+                            <p class="text-xs text-gray-500 mt-1">系統會自動過濾 # 等特殊符號，確保連結正常。</p>
+                        </div>
+                    </div>
+                    <button type="submit" class="w-full py-3 bg-blue-600 text-white font-bold rounded-xl shadow-md hover:bg-blue-700">儲存店舖</button>
+                </form>
+            </div>
+            
+            <h2 class="text-lg font-bold mb-3 text-gray-800">現有店舖列表 (點擊複製連結)</h2>
+            <div id="adminShopList" class="grid grid-cols-1 gap-3"></div>
+        </div>
+
+        <!-- 2. 產品管理區 -->
+        <div id="admin-view-products" class="hidden">
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6">
+                <label class="block text-sm font-bold text-gray-800 mb-2">請選擇要管理的店舖：</label>
+                <select id="admin-shop-select" onchange="window.onAdminShopChange()" class="w-full h-12 px-3 bg-gray-50 border border-gray-300 rounded-lg font-bold text-blue-700">
+                    <option value="">-- 請先選擇店舖 --</option>
+                </select>
+            </div>
+
+            <div id="product-management-area" class="hidden">
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 mb-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-lg font-bold flex items-center gap-2">➕ 新增產品</h2>
+                        <button onclick="window.toggleBulkImport()" class="text-xs bg-purple-100 text-purple-700 px-3 py-1 rounded-lg font-bold">Excel 批量匯入</button>
+                    </div>
+
+                    <!-- 批量匯入區塊 -->
+                    <div id="bulk-import-area" class="hidden mb-4 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                        <p class="text-xs text-purple-800 mb-2">請從 Excel 複製資料並貼上。格式必須為 6 欄 (Tab分隔)：<br>
+                        <strong>客人名稱 | 客人單位 | 內部名稱 | 內部前綴 | 內部單位 | 轉換比例</strong></p>
+                        <textarea id="bulk-data" rows="5" class="w-full p-2 text-sm border border-gray-300 rounded focus:ring-purple-500 mb-2" placeholder="切大粒雞脾&#9;kg&#9;雞脾&#9;(切大粒)&#9;p&#9;2.25&#10;豬扒&#9;kg&#9;豬扒-足&#9;(分兩袋裝)&#9;p&#9;2.2"></textarea>
+                        <button onclick="window.processBulkImport()" class="w-full py-2 bg-purple-600 text-white rounded font-bold hover:bg-purple-700">處理並匯入</button>
+                    </div>
+
+                    <!-- 單一新增表單 -->
+                    <form id="addProductForm" onsubmit="window.saveProduct(event)">
+                        <div class="grid grid-cols-2 gap-4 mb-4">
+                            <div class="col-span-2 bg-blue-50 p-3 rounded-lg border border-blue-100">
+                                <p class="text-xs font-bold text-blue-800 mb-2">客戶顯示設定</p>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="block text-xs text-gray-600 mb-1">客人產品名稱*</label>
+                                        <input type="text" id="a_cName" required class="w-full h-10 px-3 bg-white border border-gray-300 rounded-lg">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs text-gray-600 mb-1">客人單位*</label>
+                                        <input type="text" id="a_cUnit" required class="w-full h-10 px-3 bg-white border border-gray-300 rounded-lg">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-span-2 bg-green-50 p-3 rounded-lg border border-green-100">
+                                <p class="text-xs font-bold text-green-800 mb-2">內部執貨設定 (WhatsApp 格式)</p>
+                                <div class="grid grid-cols-2 gap-3 mb-3">
+                                    <div>
+                                        <label class="block text-xs text-gray-600 mb-1">執貨備註/前綴</label>
+                                        <input type="text" id="a_iPrefix" class="w-full h-10 px-3 bg-white border border-gray-300 rounded-lg">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs text-gray-600 mb-1">執貨名稱*</label>
+                                        <input type="text" id="a_iName" required class="w-full h-10 px-3 bg-white border border-gray-300 rounded-lg">
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="block text-xs text-gray-600 mb-1">執貨單位*</label>
+                                        <input type="text" id="a_iUnit" required class="w-full h-10 px-3 bg-white border border-gray-300 rounded-lg">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs text-gray-600 mb-1">轉換比例*</label>
+                                        <input type="number" id="a_ratio" step="0.001" required class="w-full h-10 px-3 bg-white border border-gray-300 rounded-lg">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <button type="submit" class="w-full py-3 bg-blue-600 text-white font-bold rounded-xl shadow-md hover:bg-blue-700">新增此產品</button>
+                    </form>
+                </div>
+
+                <h2 class="text-lg font-bold mb-4 text-gray-800">此店舖的產品列表</h2>
+                <div id="adminProductList" class="grid grid-cols-1 gap-3"></div>
+            </div>
+        </div>
+    </main>
+
+    <!-- ==================== Firebase 邏輯區 ==================== -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase 基礎設定
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'b2b-order-system-multi';
+        const mockConfig = { apiKey: "mock", authDomain: "mock", projectId: "mock" };
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : mockConfig;
+        
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // 全域狀態
+        window.allShops = [];
+        window.allProducts = []; // 包含所有店的產品，透過 JS 過濾
+        window.allOrders = [];   // 包含所有訂單
+        window.adminAuthenticated = false;
+        window.customItemCount = 0;
+        window.currentShopId = new URLSearchParams(window.location.search).get('shop');
+
+        // 初始化
+        async function initApp() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                
+                if (auth.currentUser) {
+                    loadData();
+                }
+            } catch (error) {
+                console.error("Auth failed:", error);
+                window.showToast("系統連線失敗", true);
+            }
+        }
+
+        function loadData() {
+            const shopsRef = collection(db, 'artifacts', appId, 'public', 'data', 'shops');
+            onSnapshot(shopsRef, (snapshot) => {
+                window.allShops = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                updateUIBasedOnState();
+                renderAdminShops();
+                updateAdminShopDropdown();
+            }, (err) => console.error(err));
+
+            const productsRef = collection(db, 'artifacts', appId, 'public', 'data', 'products');
+            onSnapshot(productsRef, (snapshot) => {
+                window.allProducts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                // 排序
+                window.allProducts.sort((a, b) => a.cName.localeCompare(b.cName));
+                renderCustomerProducts();
+                if(document.getElementById('admin-shop-select').value) {
+                    renderAdminProducts();
+                }
+            }, (err) => console.error(err));
+
+            const ordersRef = collection(db, 'artifacts', appId, 'public', 'data', 'orders');
+            onSnapshot(ordersRef, (snapshot) => {
+                window.allOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                window.allOrders.sort((a, b) => b.timestamp - a.timestamp); // 最新排前面
+                if(!document.getElementById('admin-view-orders').classList.contains('hidden')) {
+                    renderAdminOrders();
+                }
+            }, (err) => console.error(err));
+        }
+
+        function updateUIBasedOnState() {
+            const shop = window.allShops.find(s => s.shopId === window.currentShopId);
+            
+            if (shop) {
+                document.getElementById('customer-shop-name').innerText = shop.name;
+                document.getElementById('main-title').innerText = `${shop.name} - 滿記落單系統`;
+                document.getElementById('view-noshop').classList.add('hidden');
+                
+                // 若沒有強制切換到admin，則顯示落單區
+                if(!document.getElementById('view-admin').classList.contains('hidden')) return;
+                
+                document.getElementById('view-customer').classList.remove('hidden');
+                document.getElementById('customer-footer').classList.remove('hidden');
+            } else {
+                // 無效 shopId 或沒給
+                document.getElementById('view-customer').classList.add('hidden');
+                document.getElementById('customer-footer').classList.add('hidden');
+                
+                if(document.getElementById('view-admin').classList.contains('hidden')) {
+                    document.getElementById('view-noshop').classList.remove('hidden');
+                    renderShopShortcuts();
+                }
+            }
+        }
+
+        // ================= UI 與切換 =================
+        window.switchTab = (tab) => {
+            if (tab === 'admin' && !window.adminAuthenticated) {
+                document.getElementById('passwordModal').classList.remove('hidden');
+                document.getElementById('adminPassword').focus();
+                return;
+            }
+
+            const customerView = document.getElementById('view-customer');
+            const adminView = document.getElementById('view-admin');
+            const noShopView = document.getElementById('view-noshop');
+            const footer = document.getElementById('customer-footer');
+
+            document.getElementById('tab-customer').className = tab === 'customer' ? 'flex-1 py-3 text-center tab-active transition-colors' : 'flex-1 py-3 text-center tab-inactive transition-colors';
+            document.getElementById('tab-admin').className = tab === 'admin' ? 'flex-1 py-3 text-center tab-active transition-colors' : 'flex-1 py-3 text-center tab-inactive transition-colors';
+
+            if (tab === 'customer') {
+                adminView.classList.add('hidden');
+                updateUIBasedOnState(); // 會自動處理有沒有 shopId
+            } else {
+                customerView.classList.add('hidden');
+                footer.classList.add('hidden');
+                noShopView.classList.add('hidden');
+                adminView.classList.remove('hidden');
+            }
+        };
+
+        window.switchAdminTab = (subTab) => {
+            document.getElementById('admin-tab-orders').className = subTab === 'orders' ? 'flex-1 py-2 px-2 rounded-lg font-bold admin-sub-tab-active transition-colors whitespace-nowrap text-sm' : 'flex-1 py-2 px-2 rounded-lg font-bold admin-sub-tab-inactive transition-colors whitespace-nowrap text-sm';
+            document.getElementById('admin-tab-shops').className = subTab === 'shops' ? 'flex-1 py-2 px-2 rounded-lg font-bold admin-sub-tab-active transition-colors whitespace-nowrap text-sm' : 'flex-1 py-2 px-2 rounded-lg font-bold admin-sub-tab-inactive transition-colors whitespace-nowrap text-sm';
+            document.getElementById('admin-tab-products').className = subTab === 'products' ? 'flex-1 py-2 px-2 rounded-lg font-bold admin-sub-tab-active transition-colors whitespace-nowrap text-sm' : 'flex-1 py-2 px-2 rounded-lg font-bold admin-sub-tab-inactive transition-colors whitespace-nowrap text-sm';
+            
+            document.getElementById('admin-view-orders').classList.add('hidden');
+            document.getElementById('admin-view-shops').classList.add('hidden');
+            document.getElementById('admin-view-products').classList.add('hidden');
+
+            document.getElementById(`admin-view-${subTab}`).classList.remove('hidden');
+
+            if(subTab === 'orders') renderAdminOrders();
+        };
+
+        // ================= 認證 =================
+        window.verifyPassword = () => {
+            if (document.getElementById('adminPassword').value === 'moonkee') {
+                window.adminAuthenticated = true;
+                window.closePasswordModal();
+                window.switchTab('admin');
+            } else {
+                document.getElementById('passwordError').classList.remove('hidden');
+            }
+        };
+        window.closePasswordModal = () => {
+            document.getElementById('passwordModal').classList.add('hidden');
+            document.getElementById('passwordError').classList.add('hidden');
+            document.getElementById('adminPassword').value = '';
+        };
+
+        // ================= 店舖管理 =================
+        window.toggleWaInput = () => {
+            const mode = document.getElementById('s_wa_mode').value;
+            const container = document.getElementById('wa_number_container');
+            if (mode === 'direct') {
+                container.classList.remove('hidden');
+                document.getElementById('s_whatsapp').required = true;
+            } else {
+                container.classList.add('hidden');
+                document.getElementById('s_whatsapp').required = false;
+            }
+        };
+
+        window.saveShop = async (e) => {
+            e.preventDefault();
+
+            try {
+                const shopId = document.getElementById('s_id').value.trim();
+                const name = document.getElementById('s_name').value.trim();
+                const waMode = document.getElementById('s_wa_mode').value;
+                let whatsapp = document.getElementById('s_whatsapp').value.trim();
+
+                if (waMode === 'direct') {
+                    // 自動過濾非數字和 '+' 的所有符號 (例如 #, -, 空格)
+                    whatsapp = whatsapp.replace(/[^\d+]/g, '');
+                    if (!whatsapp) {
+                        window.showToast("請輸入有效的號碼 (僅限數字)", true);
+                        return;
+                    }
+                } else {
+                    whatsapp = ''; // 若為群組模式則清空號碼
+                }
+
+                if(window.allShops.some(s => s.shopId === shopId)) {
+                    window.showToast("此店舖代號已存在！", true); 
+                    return;
+                }
+
+                const newShop = { shopId, name, waMode, whatsapp };
+                
+                // 1. 本地預先更新 (Optimistic Update)，確保就算無網絡/認證延遲也能立即運作
+                window.allShops.push({ id: 'local-' + Date.now(), ...newShop });
+                document.getElementById('addShopForm').reset();
+                window.toggleWaInput();
+                renderAdminShops();
+                updateAdminShopDropdown();
+                window.showToast("店舖新增成功！");
+
+                // 2. 若 Firebase 已連線，則背景同步至雲端
+                if (auth.currentUser) {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'shops'), newShop);
+                }
+            } catch (err) { 
+                console.error(err);
+            }
+        };
+
+        function renderAdminShops() {
+            const list = document.getElementById('adminShopList');
+            list.innerHTML = window.allShops.map(s => {
+                const url = `${window.location.origin}${window.location.pathname}?shop=${s.shopId}`;
+                const waText = s.waMode === 'direct' ? `號碼: ${s.whatsapp}` : `手動選擇群組`;
+                return `
+                <div class="bg-gray-50 p-4 rounded-xl border border-gray-200 flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                    <div>
+                        <div class="font-bold text-blue-700">${s.name} <span class="text-xs text-gray-500">(${s.shopId})</span></div>
+                        <div class="text-sm text-gray-600">WhatsApp: ${waText}</div>
+                    </div>
+                    <button onclick="window.copyToClipboard('${url}')" class="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm font-bold flex items-center justify-center gap-1">
+                        📋 複製專屬連結
+                    </button>
+                </div>
+            `}).join('');
+        }
+
+        window.copyToClipboard = (text) => {
+            navigator.clipboard.writeText(text).then(() => window.showToast("連結已複製！"));
+        };
+
+        function renderShopShortcuts() {
+            const list = document.getElementById('shopSelectorList');
+            list.innerHTML = window.allShops.map(s => `
+                <a href="?shop=${s.shopId}" class="block w-full py-3 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg font-bold hover:bg-blue-100">
+                    進入 ${s.name} 落單
+                </a>
+            `).join('');
+        }
+
+        // ================= 產品管理 (管理員) =================
+        function updateAdminShopDropdown() {
+            const select = document.getElementById('admin-shop-select');
+            const currentVal = select.value;
+            select.innerHTML = '<option value="">-- 請先選擇店舖 --</option>' + 
+                window.allShops.map(s => `<option value="${s.shopId}">${s.name}</option>`).join('');
+            if(window.allShops.some(s => s.shopId === currentVal)) select.value = currentVal;
+        }
+
+        window.onAdminShopChange = () => {
+            const shopId = document.getElementById('admin-shop-select').value;
+            if(shopId) {
+                document.getElementById('product-management-area').classList.remove('hidden');
+                renderAdminProducts();
+            } else {
+                document.getElementById('product-management-area').classList.add('hidden');
+            }
+        };
+
+        window.saveProduct = async (e) => {
+            e.preventDefault();
+            
+            const shopId = document.getElementById('admin-shop-select').value;
+            if(!shopId) return;
+
+            const productData = {
+                shopId,
+                cName: document.getElementById('a_cName').value.trim(),
+                cUnit: document.getElementById('a_cUnit').value.trim(),
+                iPrefix: document.getElementById('a_iPrefix').value.trim(),
+                iName: document.getElementById('a_iName').value.trim(),
+                iUnit: document.getElementById('a_iUnit').value.trim(),
+                ratio: parseFloat(document.getElementById('a_ratio').value)
+            };
+
+            // 1. 本地預先更新，不依賴網絡狀態
+            window.allProducts.push({ id: 'local-' + Date.now(), ...productData });
+            document.getElementById('addProductForm').reset();
+            renderAdminProducts();
+            window.showToast("產品已新增");
+            document.getElementById('a_cName').focus();
+
+            // 2. 背景同步至雲端
+            if (auth.currentUser) {
+                try {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'products'), productData);
+                } catch (err) { console.error(err); }
+            }
+        };
+
+        window.deleteProduct = async (id) => {
+            if(!confirm("確定刪除此產品？")) return;
+            
+            // 1. 本地預先刪除
+            window.allProducts = window.allProducts.filter(p => p.id !== id);
+            renderAdminProducts();
+            window.showToast("產品已刪除");
+            
+            // 2. 雲端同步刪除 (如果不是剛建立的本地暫存項目)
+            if (auth.currentUser && !id.startsWith('local-')) {
+                try {
+                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', id));
+                } catch(e) { console.error(e); }
+            }
+        };
+
+        function renderAdminProducts() {
+            const shopId = document.getElementById('admin-shop-select').value;
+            const shopProducts = window.allProducts.filter(p => p.shopId === shopId);
+            const list = document.getElementById('adminProductList');
+            
+            if(shopProducts.length === 0) { list.innerHTML = '<div class="text-gray-400 text-sm py-4">此店舖尚無產品</div>'; return; }
+            
+            list.innerHTML = shopProducts.map(p => `
+                <div class="bg-white p-3 rounded-xl border border-gray-200 flex justify-between items-center relative overflow-hidden">
+                    <div class="absolute left-0 top-0 bottom-0 w-1 bg-blue-500"></div>
+                    <div class="pl-2 flex-1">
+                        <div class="font-bold text-sm">${p.cName} <span class="text-xs font-normal text-gray-500">(${p.cUnit})</span></div>
+                        <div class="text-[11px] text-gray-500 mt-1">輸出: <span class="text-green-600 font-semibold">${p.iPrefix ? p.iPrefix + ' ' : ''}${p.iName} (×${p.ratio}${p.iUnit})</span></div>
+                    </div>
+                    <button onclick="window.deleteProduct('${p.id}')" class="text-red-500 px-2 py-1 bg-red-50 rounded hover:bg-red-100 text-sm">刪除</button>
+                </div>
+            `).join('');
+        }
+
+        // ================= 批量匯入 =================
+        window.toggleBulkImport = () => {
+            document.getElementById('bulk-import-area').classList.toggle('hidden');
+        };
+
+        window.processBulkImport = async () => {
+            const shopId = document.getElementById('admin-shop-select').value;
+            if(!shopId) { window.showToast("請先選擇店舖", true); return; }
+            
+            const rawData = document.getElementById('bulk-data').value;
+            const lines = rawData.split('\n');
+            let successCount = 0;
+
+            for(let line of lines) {
+                line = line.trim();
+                if(!line) continue;
+                const cols = line.split('\t');
+                if(cols.length >= 6) {
+                    const productData = {
+                        shopId,
+                        cName: cols[0].trim(),
+                        cUnit: cols[1].trim(),
+                        iName: cols[2].trim(),
+                        iPrefix: cols[3].trim(),
+                        iUnit: cols[4].trim(),
+                        ratio: parseFloat(cols[5].trim())
+                    };
+                    if(productData.cName && !isNaN(productData.ratio)) {
+                        // 1. 本地更新
+                        window.allProducts.push({ id: 'local-' + Math.random().toString(36).substr(2, 9), ...productData });
+                        successCount++;
+                        
+                        // 2. 雲端同步
+                        if (auth.currentUser) {
+                            try {
+                                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'products'), productData);
+                            } catch(e) { console.error(e); }
+                        }
+                    }
+                }
+            }
+            
+            if(successCount > 0) {
+                renderAdminProducts();
+                window.showToast(`成功匯入 ${successCount} 筆產品！`);
+                document.getElementById('bulk-data').value = '';
+                document.getElementById('bulk-import-area').classList.add('hidden');
+            } else {
+                window.showToast("未能解析任何資料，請檢查格式", true);
+            }
+        };
+
+        // ================= 落單區 (客製項目 & 提交) =================
+        function renderCustomerProducts() {
+            if(!window.currentShopId) return;
+            const shopProducts = window.allProducts.filter(p => p.shopId === window.currentShopId);
+            const list = document.getElementById('productList');
+            
+            if (shopProducts.length === 0) {
+                list.innerHTML = '<div class="text-center py-10 text-gray-400">目前尚無產品。</div>';
+                return;
+            }
+            
+            list.innerHTML = shopProducts.map((p) => `
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
+                    <div class="flex-1 pr-2">
+                        <div class="text-base font-bold text-gray-800 leading-tight">${p.cName}</div>
+                        <div class="text-xs text-gray-500 mt-1">單位: ${p.cUnit}</div>
+                    </div>
+                    <div class="w-24 shrink-0">
+                        <input type="number" id="qty-${p.id}" min="0" placeholder="0" class="w-full h-11 text-center font-bold text-lg bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 transition-colors">
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        window.addCustomItem = () => {
+            const list = document.getElementById('customItemsList');
+            const id = window.customItemCount++;
+            const div = document.createElement('div');
+            div.id = `custom-item-${id}`;
+            div.className = "bg-white p-4 rounded-xl shadow-sm border border-gray-100 relative";
+            div.innerHTML = `
+                <button onclick="document.getElementById('custom-item-${id}').remove()" class="absolute top-2 right-2 text-gray-400 hover:text-red-500 p-1">❌</button>
+                <div class="grid grid-cols-2 gap-3 mb-3 pr-6">
+                    <div><label class="block text-xs text-gray-500 mb-1">產品名稱</label><input type="text" id="c-name-${id}" class="w-full h-10 px-2 bg-gray-50 border rounded-lg"></div>
+                    <div><label class="block text-xs text-gray-500 mb-1">備註 (選填)</label><input type="text" id="c-rem-${id}" class="w-full h-10 px-2 bg-gray-50 border rounded-lg"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div><label class="block text-xs text-gray-500 mb-1">數量</label><input type="number" id="c-qty-${id}" min="0" class="w-full h-10 px-2 bg-gray-50 border rounded-lg"></div>
+                    <div><label class="block text-xs text-gray-500 mb-1">單位</label><input type="text" id="c-unit-${id}" class="w-full h-10 px-2 bg-gray-50 border rounded-lg"></div>
+                </div>
+            `;
+            list.appendChild(div);
+        };
+
+        window.submitOrder = async () => {
+            const shop = window.allShops.find(s => s.shopId === window.currentShopId);
+            if(!shop) return;
+
+            let orderLines = [];
+            const shopProducts = window.allProducts.filter(p => p.shopId === window.currentShopId);
+            
+            shopProducts.forEach(p => {
+                const input = document.getElementById(`qty-${p.id}`);
+                if (input && input.value && parseFloat(input.value) > 0) {
+                    let qty = parseFloat(input.value);
+                    let calcQty = Math.round(qty * p.ratio * 100) / 100;
+                    let prefixStr = p.iPrefix ? `${p.iPrefix} ` : '';
+                    orderLines.push(`${prefixStr}${p.iName} ${calcQty}${p.iUnit}`);
+                }
+            });
+
+            const customItems = document.getElementById('customItemsList').children;
+            for(let i = 0; i < customItems.length; i++) {
+                const id = customItems[i].id.replace('custom-item-', '');
+                const name = document.getElementById(`c-name-${id}`).value.trim();
+                const qty = parseFloat(document.getElementById(`c-qty-${id}`).value);
+                const unit = document.getElementById(`c-unit-${id}`).value.trim();
+                const remark = document.getElementById(`c-rem-${id}`).value.trim();
+
+                if (name && !isNaN(qty) && qty > 0) {
+                    let line = remark ? `(${remark}) ` : "";
+                    line += `${name} ${qty}${unit}`;
+                    orderLines.push(line);
+                }
+            }
+
+            if (orderLines.length === 0) {
+                window.showToast("請至少填寫一件產品數量！", true); return;
+            }
+
+            const finalOrderText = `餐廳名稱: ${shop.name}\n\n${orderLines.join('\n')}`;
+            
+            const newOrder = {
+                shopId: shop.shopId,
+                shopName: shop.name,
+                orderText: finalOrderText,
+                timestamp: Date.now()
+            };
+
+            // 儲存至後台 Firebase
+            if (auth.currentUser) {
+                try {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), newOrder);
+                    
+                    window.showToast("訂單已成功送出！", false);
+                    
+                    // 重置頁面
+                    shopProducts.forEach(p => {
+                        const input = document.getElementById(`qty-${p.id}`);
+                        if (input) input.value = '';
+                    });
+                    document.getElementById('customItemsList').innerHTML = '';
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                } catch(err) {
+                    console.error("提交訂單失敗", err);
+                    window.showToast("系統繁忙，請稍後再試！", true);
+                }
+            } else {
+                window.showToast("系統未連線，請稍後再試！", true);
+            }
+        };
+
+        // ================= 訂單管理 (後台) =================
+        function renderAdminOrders() {
+            const list = document.getElementById('adminOrderList');
+            if(window.allOrders.length === 0) { 
+                list.innerHTML = '<div class="text-gray-400 text-sm py-4 text-center">暫無訂單</div>'; 
+                return; 
+            }
+            
+            list.innerHTML = window.allOrders.map(o => {
+                const date = new Date(o.timestamp).toLocaleString('zh-HK');
+                return `
+                <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm relative">
+                    <button onclick="window.deleteOrder('${o.id}')" class="absolute top-3 right-3 text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 px-2 py-1 rounded text-xs transition-colors">刪除</button>
+                    <div class="font-bold text-blue-700 text-lg mb-1">${o.shopName}</div>
+                    <div class="text-xs text-gray-500 mb-3">落單時間: ${date}</div>
+                    <div class="bg-gray-50 border border-gray-100 p-3 rounded-lg text-sm text-gray-800 whitespace-pre-wrap mb-4 font-mono">${o.orderText}</div>
+                    <div class="flex gap-2">
+                        <button onclick="window.copyOrder('${o.id}')" class="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-bold transition-colors">📋 複製訂單</button>
+                        <button onclick="window.sendOrderToWa('${o.id}')" class="flex-1 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-bold transition-colors">💬 發送至 WhatsApp</button>
+                    </div>
+                </div>
+                `;
+            }).join('');
+        };
+
+        window.copyOrder = (id) => {
+            const order = window.allOrders.find(o => o.id === id);
+            if(order) {
+                navigator.clipboard.writeText(order.orderText).then(() => window.showToast("訂單內容已複製！"));
+            }
+        };
+
+        window.sendOrderToWa = (id) => {
+            const order = window.allOrders.find(o => o.id === id);
+            if(order) {
+                const waUrl = `https://wa.me/?text=${encodeURIComponent(order.orderText)}`;
+                window.open(waUrl, '_blank');
+            }
+        };
+
+        window.deleteOrder = async (id) => {
+            if(confirm("確定要刪除這筆訂單嗎？刪除後無法恢復。")) {
+                if (auth.currentUser) {
+                    try {
+                        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', id));
+                        window.showToast("訂單已刪除");
+                    } catch(e) {
+                        console.error(e);
+                    }
+                }
+            }
+        };
+
+        // 共用工具
+        window.showToast = (msg, isErr=false) => {
+            const t = document.getElementById('toastMsg');
+            t.innerText = msg;
+            t.className = `fixed top-32 left-1/2 -translate-x-1/2 ${isErr?'bg-red-500':'bg-gray-800'} text-white px-6 py-3 rounded-full shadow-lg transition-opacity duration-300 z-50 whitespace-nowrap text-sm`;
+            setTimeout(() => t.classList.add('opacity-0'), 3000);
+        };
+
+        initApp();
+    </script>
+</body>
+</html>
